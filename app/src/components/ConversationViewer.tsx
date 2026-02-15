@@ -12,7 +12,9 @@ import {
   PanelLeftOpen,
 } from 'lucide-react';
 import { TurnViewer } from './TurnViewer';
+import { TurnGroupViewer } from './TurnGroupViewer';
 import { ConversationIndex } from './ConversationIndex';
+import { groupTurns } from '../lib/logParser';
 import { formatTokens, formatDate } from '../lib/utils';
 import type { ParsedSession } from '../types';
 
@@ -122,6 +124,8 @@ export const ConversationViewer = memo(function ConversationViewer({
 
   const visibleTurns = session.turns;
 
+  const turnGroups = useMemo(() => groupTurns(visibleTurns), [visibleTurns]);
+
   const regularAgentCount = useMemo(() => {
     return Array.from(session.agentRegistry.values()).filter(a => !a.isCompact).length;
   }, [session.agentRegistry]);
@@ -149,17 +153,25 @@ export const ConversationViewer = memo(function ConversationViewer({
     setIsIndexOpen(prev => !prev);
   }, []);
 
-  const renderTurn = useCallback(
+  const renderItem = useCallback(
     (index: number) => {
-      const turn = visibleTurns[index];
-      const agentInfo = turn.agentId ? session.agentRegistry.get(turn.agentId) : undefined;
+      const group = turnGroups[index];
+      if (group.turns.length === 1) {
+        const turn = group.turns[0];
+        const agentInfo = turn.agentId ? session.agentRegistry.get(turn.agentId) : undefined;
+        return (
+          <div className="py-4">
+            <TurnViewer turn={turn} agentInfo={agentInfo} agentRegistry={session.agentRegistry} />
+          </div>
+        );
+      }
       return (
         <div className="py-4">
-          <TurnViewer turn={turn} agentInfo={agentInfo} agentRegistry={session.agentRegistry} />
+          <TurnGroupViewer group={group} agentRegistry={session.agentRegistry} />
         </div>
       );
     },
-    [visibleTurns, session.agentRegistry]
+    [turnGroups, session.agentRegistry]
   );
 
   const virtuosoStyle = useMemo(() => ({ height: '100%' as const }), []);
@@ -191,9 +203,9 @@ export const ConversationViewer = memo(function ConversationViewer({
         {isIndexOpen && (
           <div className="w-[260px] shrink-0 border-r border-border bg-muted/30 overflow-hidden">
             <ConversationIndex
-              turns={visibleTurns}
-              activeTurnIndex={activeTurnIndex}
-              onJumpToTurn={handleJumpToTurn}
+              turnGroups={turnGroups}
+              activeGroupIndex={activeTurnIndex}
+              onJumpToGroup={handleJumpToTurn}
             />
           </div>
         )}
@@ -202,8 +214,8 @@ export const ConversationViewer = memo(function ConversationViewer({
           <Virtuoso
             ref={virtuosoRef}
             style={virtuosoStyle}
-            totalCount={visibleTurns.length}
-            itemContent={renderTurn}
+            totalCount={turnGroups.length}
+            itemContent={renderItem}
             rangeChanged={handleRangeChanged}
             className="px-4"
             components={virtuosoComponents}

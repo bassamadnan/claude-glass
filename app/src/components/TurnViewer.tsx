@@ -66,20 +66,19 @@ function computeLineDiff(oldStr: string, newStr: string): DiffEntry[] {
 
 // Build paired rows for side-by-side display
 type SideBySideRow = {
-  leftNum?: number; leftText?: string; leftType: 'same' | 'remove' | 'empty';
-  rightNum?: number; rightText?: string; rightType: 'same' | 'add' | 'empty';
+  leftText?: string; leftType: 'same' | 'remove' | 'empty';
+  rightText?: string; rightType: 'same' | 'add' | 'empty';
 };
 
 function buildSideBySideRows(entries: DiffEntry[]): SideBySideRow[] {
   const rows: SideBySideRow[] = [];
-  let oldNum = 1, newNum = 1;
   let i = 0;
   while (i < entries.length) {
     const entry = entries[i];
     if (entry.type === 'same') {
       rows.push({
-        leftNum: oldNum++, leftText: entry.text, leftType: 'same',
-        rightNum: newNum++, rightText: entry.text, rightType: 'same',
+        leftText: entry.text, leftType: 'same',
+        rightText: entry.text, rightType: 'same',
       });
       i++;
     } else {
@@ -97,10 +96,8 @@ function buildSideBySideRows(entries: DiffEntry[]): SideBySideRow[] {
       const maxLen = Math.max(removes.length, adds.length);
       for (let k = 0; k < maxLen; k++) {
         rows.push({
-          leftNum: k < removes.length ? oldNum++ : undefined,
           leftText: k < removes.length ? removes[k] : undefined,
           leftType: k < removes.length ? 'remove' : 'empty',
-          rightNum: k < adds.length ? newNum++ : undefined,
           rightText: k < adds.length ? adds[k] : undefined,
           rightType: k < adds.length ? 'add' : 'empty',
         });
@@ -110,7 +107,7 @@ function buildSideBySideRows(entries: DiffEntry[]): SideBySideRow[] {
   return rows;
 }
 
-function EditDiffView({ filePath, oldString, newString }: { filePath: string; oldString: string; newString: string }) {
+export function EditDiffView({ filePath, oldString, newString }: { filePath: string; oldString: string; newString: string }) {
   const entries = computeLineDiff(oldString, newString);
   const rows = buildSideBySideRows(entries);
   return (
@@ -126,13 +123,7 @@ function EditDiffView({ filePath, oldString, newString }: { filePath: string; ol
               <tr key={i}>
                 {/* Left side (old) */}
                 <td className={cn(
-                  "select-none text-right pr-1 pl-2 text-muted-foreground/30 w-[30px] whitespace-nowrap align-top",
-                  row.leftType === 'remove' && 'bg-red-500/15',
-                )}>
-                  {row.leftNum ?? ''}
-                </td>
-                <td className={cn(
-                  "whitespace-pre-wrap w-[calc(50%-30px)] align-top px-2 border-r border-border/40",
+                  "whitespace-pre-wrap w-1/2 align-top px-2 border-r border-border/40",
                   row.leftType === 'remove' && 'bg-red-500/10 text-red-300',
                   row.leftType === 'empty' && 'bg-muted/30',
                 )}>
@@ -140,13 +131,7 @@ function EditDiffView({ filePath, oldString, newString }: { filePath: string; ol
                 </td>
                 {/* Right side (new) */}
                 <td className={cn(
-                  "select-none text-right pr-1 pl-2 text-muted-foreground/30 w-[30px] whitespace-nowrap align-top",
-                  row.rightType === 'add' && 'bg-green-500/15',
-                )}>
-                  {row.rightNum ?? ''}
-                </td>
-                <td className={cn(
-                  "whitespace-pre-wrap w-[calc(50%-30px)] align-top px-2",
+                  "whitespace-pre-wrap w-1/2 align-top px-2",
                   row.rightType === 'add' && 'bg-green-500/10 text-green-300',
                   row.rightType === 'empty' && 'bg-muted/30',
                 )}>

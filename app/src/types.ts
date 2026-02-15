@@ -218,6 +218,13 @@ export interface AgentInfo {
   firstTurnIndex: number;
 }
 
+export interface TurnGroup {
+  id: string;
+  turns: ConversationTurn[];
+  editedFiles: string[];  // files edited across the group
+  totalToolCalls: number;
+}
+
 export interface ParsedSession {
   sessionId: string;
   version: string;

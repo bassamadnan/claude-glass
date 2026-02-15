@@ -1,39 +1,44 @@
 import { memo, useRef, useEffect } from 'react';
 import { User, Scissors } from 'lucide-react';
 import { cn, formatTokens } from '../lib/utils';
-import type { ConversationTurn } from '../types';
+import type { TurnGroup } from '../types';
 
 interface ConversationIndexProps {
-  turns: ConversationTurn[];
-  activeTurnIndex: number;
-  onJumpToTurn: (index: number) => void;
+  turnGroups: TurnGroup[];
+  activeGroupIndex: number;
+  onJumpToGroup: (index: number) => void;
 }
 
 interface IndexEntry {
-  turnIndex: number;
+  groupIndex: number;
   type: 'user' | 'compact';
   label: string;
   preTokens?: number;
 }
 
-function buildIndex(turns: ConversationTurn[]): IndexEntry[] {
+function buildIndex(groups: TurnGroup[]): IndexEntry[] {
   const entries: IndexEntry[] = [];
-  for (let i = 0; i < turns.length; i++) {
-    const turn = turns[i];
-    if (turn.type === 'user' && turn.userContent && !turn.agentId) {
+  for (let i = 0; i < groups.length; i++) {
+    const group = groups[i];
+    const firstTurn = group.turns[0];
+
+    // Skip multi-turn groups in the sidebar
+    if (group.turns.length > 1) continue;
+
+    if (firstTurn.type === 'user' && firstTurn.userContent && !firstTurn.agentId) {
       entries.push({
-        turnIndex: i,
+        groupIndex: i,
         type: 'user',
-        label: turn.userContent.length > 60
-          ? turn.userContent.slice(0, 60) + '…'
-          : turn.userContent,
+        label: firstTurn.userContent.length > 60
+          ? firstTurn.userContent.slice(0, 60) + '\u2026'
+          : firstTurn.userContent,
       });
-    } else if (turn.type === 'system' && turn.systemSubtype === 'compact_boundary') {
+    } else if (firstTurn.type === 'system' && firstTurn.systemSubtype === 'compact_boundary') {
       entries.push({
-        turnIndex: i,
+        groupIndex: i,
         type: 'compact',
         label: 'Compacted',
-        preTokens: turn.preTokens,
+        preTokens: firstTurn.preTokens,
       });
     }
   }
@@ -41,11 +46,11 @@ function buildIndex(turns: ConversationTurn[]): IndexEntry[] {
 }
 
 export const ConversationIndex = memo(function ConversationIndex({
-  turns,
-  activeTurnIndex,
-  onJumpToTurn,
+  turnGroups,
+  activeGroupIndex,
+  onJumpToGroup,
 }: ConversationIndexProps) {
-  const entries = buildIndex(turns);
+  const entries = buildIndex(turnGroups);
   const activeRef = useRef<HTMLButtonElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -63,12 +68,12 @@ export const ConversationIndex = memo(function ConversationIndex({
         el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
     }
-  }, [activeTurnIndex]);
+  }, [activeGroupIndex]);
 
-  // Find which index entry is "active" — closest entry at or before activeTurnIndex
+  // Find which index entry is "active" — closest entry at or before activeGroupIndex
   let activeEntryIdx = -1;
   for (let i = entries.length - 1; i >= 0; i--) {
-    if (entries[i].turnIndex <= activeTurnIndex) {
+    if (entries[i].groupIndex <= activeGroupIndex) {
       activeEntryIdx = i;
       break;
     }
@@ -90,9 +95,9 @@ export const ConversationIndex = memo(function ConversationIndex({
         if (entry.type === 'compact') {
           return (
             <button
-              key={`compact-${entry.turnIndex}`}
+              key={`compact-${entry.groupIndex}`}
               ref={isActive ? activeRef : undefined}
-              onClick={() => onJumpToTurn(entry.turnIndex)}
+              onClick={() => onJumpToGroup(entry.groupIndex)}
               className={cn(
                 'w-full flex items-center gap-2 px-2 py-1.5 my-1',
                 'border-l-2 transition-colors',
@@ -116,9 +121,9 @@ export const ConversationIndex = memo(function ConversationIndex({
 
         return (
           <button
-            key={`user-${entry.turnIndex}`}
+            key={`user-${entry.groupIndex}`}
             ref={isActive ? activeRef : undefined}
-            onClick={() => onJumpToTurn(entry.turnIndex)}
+            onClick={() => onJumpToGroup(entry.groupIndex)}
             className={cn(
               'w-full flex items-start gap-2 px-2 py-1.5 rounded-sm text-left',
               'border-l-2 transition-colors',

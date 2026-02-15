@@ -5,6 +5,7 @@ import type {
   SystemLogEntry,
   SummaryLogEntry,
   ConversationTurn,
+  TurnGroup,
   ParsedSession,
   AgentInfo,
   ContentBlock,
@@ -431,6 +432,81 @@ function buildAgentRegistry(turns: ConversationTurn[]): Map<string, AgentInfo> {
   }
 
   return registry;
+}
+
+/** Extract file paths touched by Edit or Write tools in a turn */
+function getEditedFiles(turn: ConversationTurn): string[] {
+  if (!turn.toolExecutions) return [];
+  const files = new Set<string>();
+  for (const tool of turn.toolExecutions) {
+    if ((tool.name === 'Edit' || tool.name === 'Write') && tool.input.file_path) {
+      files.add(String(tool.input.file_path));
+    }
+  }
+  return Array.from(files);
+}
+
+/** Group consecutive assistant turns that edit overlapping files */
+export function groupTurns(turns: ConversationTurn[]): TurnGroup[] {
+  const groups: TurnGroup[] = [];
+  let currentGroup: ConversationTurn[] = [];
+  let currentFiles = new Set<string>();
+
+  function flushGroup() {
+    if (currentGroup.length === 0) return;
+    const allFiles = new Set<string>();
+    let totalTools = 0;
+    for (const t of currentGroup) {
+      for (const f of getEditedFiles(t)) allFiles.add(f);
+      totalTools += t.toolExecutions?.length || 0;
+    }
+    groups.push({
+      id: currentGroup[0].id,
+      turns: currentGroup,
+      editedFiles: Array.from(allFiles),
+      totalToolCalls: totalTools,
+    });
+    currentGroup = [];
+    currentFiles = new Set();
+  }
+
+  for (const turn of turns) {
+    if (turn.type !== 'assistant') {
+      flushGroup();
+      // Non-assistant turns become single-turn groups
+      groups.push({
+        id: turn.id,
+        turns: [turn],
+        editedFiles: [],
+        totalToolCalls: 0,
+      });
+      continue;
+    }
+
+    const files = getEditedFiles(turn);
+
+    if (currentGroup.length === 0) {
+      // Start a new group
+      currentGroup.push(turn);
+      for (const f of files) currentFiles.add(f);
+      continue;
+    }
+
+    // Check if this assistant turn shares any edited files with the current group
+    const hasOverlap = files.length > 0 && files.some(f => currentFiles.has(f));
+
+    if (hasOverlap) {
+      currentGroup.push(turn);
+      for (const f of files) currentFiles.add(f);
+    } else {
+      flushGroup();
+      currentGroup.push(turn);
+      for (const f of files) currentFiles.add(f);
+    }
+  }
+
+  flushGroup();
+  return groups;
 }
 
 export function parseSession(text: string): ParsedSession {
