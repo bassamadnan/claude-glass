@@ -45,7 +45,7 @@ export const Modal = memo(function Modal({
       {/* Modal content */}
       <div
         className={cn(
-          'relative z-10 w-full max-w-4xl max-h-[85vh] bg-card border border-border rounded-xl shadow-2xl flex flex-col m-4',
+          'relative z-10 w-full max-w-7xl max-h-[85vh] bg-card border border-border rounded-xl shadow-2xl flex flex-col m-4',
           className
         )}
       >

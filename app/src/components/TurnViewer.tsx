@@ -6,7 +6,6 @@ import {
   Wrench,
   Terminal,
   Search,
-  FolderOpen,
   Clock,
   ChevronDown,
   ChevronUp,
@@ -29,6 +28,139 @@ interface TurnViewerProps {
   agentRegistry?: Map<string, AgentInfo>;
 }
 
+// ---- Side-by-side diff for Edit tool ----
+
+type DiffEntry = { type: 'same' | 'add' | 'remove'; text: string };
+
+function computeLineDiff(oldStr: string, newStr: string): DiffEntry[] {
+  const oldLines = oldStr.split('\n');
+  const newLines = newStr.split('\n');
+  const m = oldLines.length;
+  const n = newLines.length;
+
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = oldLines[i - 1] === newLines[j - 1]
+        ? dp[i - 1][j - 1] + 1
+        : Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+
+  const result: DiffEntry[] = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
+      result.push({ type: 'same', text: oldLines[i - 1] });
+      i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      result.push({ type: 'add', text: newLines[j - 1] });
+      j--;
+    } else {
+      result.push({ type: 'remove', text: oldLines[i - 1] });
+      i--;
+    }
+  }
+  return result.reverse();
+}
+
+// Build paired rows for side-by-side display
+type SideBySideRow = {
+  leftNum?: number; leftText?: string; leftType: 'same' | 'remove' | 'empty';
+  rightNum?: number; rightText?: string; rightType: 'same' | 'add' | 'empty';
+};
+
+function buildSideBySideRows(entries: DiffEntry[]): SideBySideRow[] {
+  const rows: SideBySideRow[] = [];
+  let oldNum = 1, newNum = 1;
+  let i = 0;
+  while (i < entries.length) {
+    const entry = entries[i];
+    if (entry.type === 'same') {
+      rows.push({
+        leftNum: oldNum++, leftText: entry.text, leftType: 'same',
+        rightNum: newNum++, rightText: entry.text, rightType: 'same',
+      });
+      i++;
+    } else {
+      // Collect consecutive remove/add runs and pair them
+      const removes: string[] = [];
+      const adds: string[] = [];
+      while (i < entries.length && entries[i].type === 'remove') {
+        removes.push(entries[i].text);
+        i++;
+      }
+      while (i < entries.length && entries[i].type === 'add') {
+        adds.push(entries[i].text);
+        i++;
+      }
+      const maxLen = Math.max(removes.length, adds.length);
+      for (let k = 0; k < maxLen; k++) {
+        rows.push({
+          leftNum: k < removes.length ? oldNum++ : undefined,
+          leftText: k < removes.length ? removes[k] : undefined,
+          leftType: k < removes.length ? 'remove' : 'empty',
+          rightNum: k < adds.length ? newNum++ : undefined,
+          rightText: k < adds.length ? adds[k] : undefined,
+          rightType: k < adds.length ? 'add' : 'empty',
+        });
+      }
+    }
+  }
+  return rows;
+}
+
+function EditDiffView({ filePath, oldString, newString }: { filePath: string; oldString: string; newString: string }) {
+  const entries = computeLineDiff(oldString, newString);
+  const rows = buildSideBySideRows(entries);
+  return (
+    <div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2 font-mono">
+        <File className="w-3.5 h-3.5 shrink-0" />
+        <span className="truncate" title={filePath}>{filePath}</span>
+      </div>
+      <div className="rounded-md border border-border overflow-hidden font-mono text-[13px] leading-[22px] overflow-x-auto">
+        <table className="w-full border-collapse table-fixed">
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={i}>
+                {/* Left side (old) */}
+                <td className={cn(
+                  "select-none text-right pr-1 pl-2 text-muted-foreground/30 w-[30px] whitespace-nowrap align-top",
+                  row.leftType === 'remove' && 'bg-red-500/15',
+                )}>
+                  {row.leftNum ?? ''}
+                </td>
+                <td className={cn(
+                  "whitespace-pre-wrap w-[calc(50%-30px)] align-top px-2 border-r border-border/40",
+                  row.leftType === 'remove' && 'bg-red-500/10 text-red-300',
+                  row.leftType === 'empty' && 'bg-muted/30',
+                )}>
+                  {row.leftText != null ? (row.leftText || '\u00A0') : '\u00A0'}
+                </td>
+                {/* Right side (new) */}
+                <td className={cn(
+                  "select-none text-right pr-1 pl-2 text-muted-foreground/30 w-[30px] whitespace-nowrap align-top",
+                  row.rightType === 'add' && 'bg-green-500/15',
+                )}>
+                  {row.rightNum ?? ''}
+                </td>
+                <td className={cn(
+                  "whitespace-pre-wrap w-[calc(50%-30px)] align-top px-2",
+                  row.rightType === 'add' && 'bg-green-500/10 text-green-300',
+                  row.rightType === 'empty' && 'bg-muted/30',
+                )}>
+                  {row.rightText != null ? (row.rightText || '\u00A0') : '\u00A0'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function formatCharCount(count: number): string {
   if (count >= 1000) {
     return `${Math.round(count / 1000)}k`;
@@ -42,7 +174,7 @@ function extractFileDetails(tools: ToolExecution[]) {
   const directories: string[] = [];
   const commands: { cmd: string; description?: string }[] = [];
   const searches: { pattern: string; type: 'glob' | 'grep' }[] = [];
-  const agents: { description?: string; stats?: ToolExecution['agentStats'] }[] = [];
+  const agents: { description?: string; subagentType?: string; model?: string; prompt?: string; stats?: ToolExecution['agentStats'] }[] = [];
 
   for (const tool of tools) {
     const input = tool.input as Record<string, unknown>;
@@ -67,6 +199,8 @@ function extractFileDetails(tools: ToolExecution[]) {
     } else if (tool.name === 'Task') {
       agents.push({
         description: input.description ? String(input.description) : undefined,
+        subagentType: input.subagent_type ? String(input.subagent_type) : undefined,
+        prompt: input.prompt ? String(input.prompt) : undefined,
         stats: tool.agentStats,
       });
     }
@@ -211,17 +345,19 @@ const FileActivitySummary = memo(function FileActivitySummary({
         </div>
       )}
 
-      {/* Sub-agents */}
+      {/* Spawned agents */}
       {details.agents.length > 0 && (
         <div>
           <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-2">
-            <FolderOpen className="w-3 h-3" />
-            Sub-Agents ({details.agents.length})
+            <Bot className="w-3 h-3" />
+            Spawned Agents ({details.agents.length})
           </div>
           <div className="space-y-2">
             {details.agents.map((a, i) => {
               const agentInfoForTask = a.stats?.agentId && agentRegistry ? agentRegistry.get(a.stats.agentId) : undefined;
               const agentColor = agentInfoForTask?.color || '#22d3ee';
+              const displayModel = agentInfoForTask?.model || (a.model ? a.model.replace('claude-', '').replace(/-\d{8}$/, '') : undefined);
+              const displayDesc = agentInfoForTask?.description || a.description;
               return (
                 <div
                   key={i}
@@ -231,18 +367,41 @@ const FileActivitySummary = memo(function FileActivitySummary({
                     borderLeft: `3px solid ${agentColor}`,
                   }}
                 >
-                  <div className="font-medium" style={{ color: agentColor }}>
-                    {agentInfoForTask ? `Agent #${agentInfoForTask.agentNumber}: ` : ''}
-                    {a.description || 'Agent task'}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold" style={{ color: agentColor }}>
+                      {agentInfoForTask ? `Agent #${agentInfoForTask.agentNumber}` : 'Agent'}
+                    </span>
+                    {displayModel && (
+                      <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                        {displayModel}
+                      </span>
+                    )}
+                    {a.subagentType && (
+                      <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                        {a.subagentType}
+                      </span>
+                    )}
                   </div>
-                  {a.stats && (
-                    <div className="mt-1" style={{ color: `${agentColor}b3` }}>
-                      {a.stats.totalToolUseCount} tool calls · {formatTokens(a.stats.totalTokens)} tokens · {Math.round(a.stats.totalDurationMs / 1000)}s
+                  {displayDesc && (
+                    <div className="mt-1 text-foreground/80">
+                      {displayDesc}
                     </div>
                   )}
-                  <div className="text-muted-foreground/60 mt-1 italic">
-                    (Individual tool calls are in the agent's separate log file)
-                  </div>
+                  {a.prompt && a.prompt !== displayDesc && (
+                    <div className="mt-1 text-muted-foreground truncate" title={a.prompt}>
+                      {a.prompt.substring(0, 120)}{a.prompt.length > 120 ? '...' : ''}
+                    </div>
+                  )}
+                  {a.stats && (
+                    <div className="mt-1.5 flex items-center gap-3" style={{ color: `${agentColor}b3` }}>
+                      <span className="flex items-center gap-1">
+                        <Wrench className="w-3 h-3" />
+                        {a.stats.totalToolUseCount} tools
+                      </span>
+                      <span>{formatTokens(a.stats.totalTokens)} tokens</span>
+                      <span>{Math.round(a.stats.totalDurationMs / 1000)}s</span>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -274,12 +433,125 @@ const ToolDetailsModal = memo(function ToolDetailsModal({
     <div className="space-y-4">
       {tools.map((tool, idx) => {
         const input = tool.input as Record<string, unknown>;
+        const isTask = tool.name === 'Task';
         const isCodeInput = tool.name === 'Bash' || tool.name === 'Write' || tool.name === 'Edit';
 
+        // For Task tools, show agent-specific rendering
+        if (isTask) {
+          const agentInfoForTask = tool.agentStats?.agentId && agentRegistry ? agentRegistry.get(tool.agentStats.agentId) : undefined;
+          const agentColor = agentInfoForTask?.color || '#22d3ee';
+          const displayModel = agentInfoForTask?.model;
+
+          return (
+            <div
+              key={tool.id || idx}
+              className="rounded-lg overflow-hidden"
+              style={{ border: `1px solid ${agentColor}40` }}
+            >
+              <div
+                className="px-4 py-2 flex items-center gap-2 flex-wrap"
+                style={{ backgroundColor: `${agentColor}15` }}
+              >
+                <Bot className="w-4 h-4" style={{ color: agentColor }} />
+                <span className="font-medium" style={{ color: agentColor }}>
+                  {agentInfoForTask ? `Agent #${agentInfoForTask.agentNumber}` : 'Spawned Agent'}
+                </span>
+                {displayModel && (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                    {displayModel}
+                  </span>
+                )}
+                {input.subagent_type ? (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                    {String(input.subagent_type)}
+                  </span>
+                ) : null}
+                {tool.result && (
+                  <span className={cn(
+                    "ml-auto text-xs px-2 py-0.5 rounded",
+                    tool.result.isError ? "bg-red-500/20 text-red-400" : "bg-green-500/20 text-green-400"
+                  )}>
+                    {tool.result.isError ? 'error' : 'completed'}
+                  </span>
+                )}
+              </div>
+              <div className="p-4 space-y-3">
+                {input.description ? (
+                  <div>
+                    <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Description</div>
+                    <div className="text-sm">{String(input.description)}</div>
+                  </div>
+                ) : null}
+                {input.prompt ? (
+                  <div>
+                    <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Prompt</div>
+                    <pre className="text-sm bg-muted p-3 rounded overflow-x-auto whitespace-pre-wrap max-h-40 overflow-y-auto">
+                      {String(input.prompt)}
+                    </pre>
+                  </div>
+                ) : null}
+                {tool.agentStats && (
+                  <div className="flex items-center gap-3 text-xs" style={{ color: `${agentColor}cc` }}>
+                    <span className="flex items-center gap-1">
+                      <Wrench className="w-3 h-3" />
+                      {tool.agentStats.totalToolUseCount} tools
+                    </span>
+                    <span>{formatTokens(tool.agentStats.totalTokens)} tokens</span>
+                    <span>{Math.round(tool.agentStats.totalDurationMs / 1000)}s</span>
+                  </div>
+                )}
+                {tool.result && (
+                  <div>
+                    <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Result</div>
+                    <pre className={cn(
+                      "text-sm p-3 rounded overflow-x-auto whitespace-pre-wrap max-h-60 overflow-y-auto",
+                      tool.result.isError ? "bg-red-500/10 text-red-300" : "bg-muted"
+                    )}>
+                      {tool.result.content || '(no output)'}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        // Edit tool — render as inline diff
+        if (tool.name === 'Edit' && input.file_path && input.old_string != null && input.new_string != null) {
+          return (
+            <div key={tool.id || idx} className="border border-border rounded-lg overflow-hidden">
+              <div className="bg-muted/50 px-4 py-2 flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-tool" />
+                <span className="font-medium text-tool">Edit</span>
+                {tool.result && (
+                  <span className={cn(
+                    "ml-auto text-xs px-2 py-0.5 rounded",
+                    tool.result.isError ? "bg-red-500/20 text-red-400" : "bg-green-500/20 text-green-400"
+                  )}>
+                    {tool.result.isError ? 'error' : 'done'}
+                  </span>
+                )}
+              </div>
+              <div className="p-4">
+                <EditDiffView
+                  filePath={String(input.file_path)}
+                  oldString={String(input.old_string)}
+                  newString={String(input.new_string)}
+                />
+              </div>
+            </div>
+          );
+        }
+
+        // Standard tool rendering
         let inputDisplay = '';
-        if (input.command) inputDisplay = String(input.command);
-        else if (input.file_path) inputDisplay = String(input.file_path);
-        else if (input.pattern) inputDisplay = String(input.pattern);
+        if (input.command) {
+          inputDisplay = String(input.command);
+        } else if (tool.name === 'Write' && input.file_path) {
+          inputDisplay = `${String(input.file_path)}\n\n${input.content != null ? String(input.content) : ''}`;
+        } else if (input.file_path) {
+          inputDisplay = String(input.file_path);
+        } else if (input.pattern) inputDisplay = String(input.pattern);
         else if (input.prompt) inputDisplay = String(input.prompt);
         else inputDisplay = JSON.stringify(input, null, 2);
 
@@ -327,29 +599,6 @@ const ToolDetailsModal = memo(function ToolDetailsModal({
                   </pre>
                 </div>
               )}
-              {tool.agentStats && (() => {
-                const agentInfoForStats = tool.agentStats.agentId && agentRegistry ? agentRegistry.get(tool.agentStats.agentId) : undefined;
-                const statsColor = agentInfoForStats?.color || '#22d3ee';
-                return (
-                  <div
-                    className="text-xs px-3 py-2 rounded space-y-1"
-                    style={{
-                      backgroundColor: `${statsColor}15`,
-                      borderLeft: `3px solid ${statsColor}`,
-                    }}
-                  >
-                    <div className="font-medium" style={{ color: statsColor }}>
-                      {agentInfoForStats ? `Agent #${agentInfoForStats.agentNumber} ` : 'Sub-agent '}
-                      completed: {tool.agentStats.totalToolUseCount} tool calls, {formatTokens(tool.agentStats.totalTokens)} tokens, {Math.round(tool.agentStats.totalDurationMs / 1000)}s
-                    </div>
-                    {tool.agentStats.agentId && (
-                      <div className="text-muted-foreground font-mono text-[10px]">
-                        To see individual tool calls, load: agent-{tool.agentStats.agentId}.jsonl
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
             </div>
           </div>
         );
@@ -454,7 +703,7 @@ export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegis
                     borderColor: `${agentInfo.color}40`,
                   }}
                 >
-                  Agent #{agentInfo.agentNumber}: {agentInfo.description}
+                  Agent #{agentInfo.agentNumber}{agentInfo.description ? `: ${agentInfo.description}` : ''}
                 </span>
               )}
               {isExpanded ? (
@@ -480,26 +729,52 @@ export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegis
 
   // System turn (compact boundary)
   if (turn.type === 'system') {
+    const sectionAgents = turn.sectionAgentIds
+      ?.map(id => agentRegistry?.get(id))
+      .filter((a): a is AgentInfo => a != null && !a.isCompact)
+      || [];
+
     return (
-      <div className="flex items-center gap-3 py-2">
-        <div className="flex-1 h-px bg-border" />
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">
-          <Scissors className="w-3 h-3" />
-          <span className="font-medium">
-            Conversation compacted
-          </span>
-          {turn.compactTrigger && (
-            <span className="text-amber-400/70">
-              ({turn.compactTrigger})
+      <div className="space-y-1.5 py-2">
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-border" />
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">
+            <Scissors className="w-3 h-3" />
+            <span className="font-medium">
+              Conversation compacted
             </span>
-          )}
-          {turn.preTokens && (
-            <span className="text-amber-400/70">
-              at {formatTokens(turn.preTokens)} tokens
-            </span>
-          )}
+            {turn.compactTrigger && (
+              <span className="text-amber-400/70">
+                ({turn.compactTrigger})
+              </span>
+            )}
+            {turn.preTokens && (
+              <span className="text-amber-400/70">
+                at {formatTokens(turn.preTokens)} tokens
+              </span>
+            )}
+          </div>
+          <div className="flex-1 h-px bg-border" />
         </div>
-        <div className="flex-1 h-px bg-border" />
+        {sectionAgents.length > 0 && (
+          <div className="flex items-center justify-center gap-2 flex-wrap">
+            <span className="text-[11px] text-muted-foreground">Included:</span>
+            {sectionAgents.map(agent => (
+              <span
+                key={agent.agentId}
+                className="text-[11px] px-1.5 py-0.5 rounded-full border flex items-center gap-1"
+                style={{
+                  backgroundColor: `${agent.color}15`,
+                  color: agent.color,
+                  borderColor: `${agent.color}30`,
+                }}
+              >
+                <Bot className="w-2.5 h-2.5" />
+                #{agent.agentNumber}{agent.description ? ` ${agent.description}` : ''}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -581,7 +856,7 @@ export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegis
                     borderColor: `${agentInfo.color}40`,
                   }}
                 >
-                  Agent #{agentInfo.agentNumber}: {agentInfo.description}
+                  Agent #{agentInfo.agentNumber}{agentInfo.description ? `: ${agentInfo.description}` : ''}
                 </span>
               )}
               {turn.model && (

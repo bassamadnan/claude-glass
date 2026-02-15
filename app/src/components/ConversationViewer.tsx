@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import {
   ArrowLeft,
@@ -8,9 +8,11 @@ import {
   Cpu,
   Clock,
   Users,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { TurnViewer } from './TurnViewer';
-import { AgentLegend } from './AgentLegend';
+import { ConversationIndex } from './ConversationIndex';
 import { formatTokens, formatDate } from '../lib/utils';
 import type { ParsedSession } from '../types';
 
@@ -25,11 +27,15 @@ const SessionHeader = memo(function SessionHeader({
   filename,
   onBack,
   agentCount,
+  isIndexOpen,
+  onToggleIndex,
 }: {
   session: ParsedSession;
   filename: string;
   onBack: () => void;
   agentCount: number;
+  isIndexOpen: boolean;
+  onToggleIndex: () => void;
 }) {
   return (
     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border">
@@ -85,6 +91,18 @@ const SessionHeader = memo(function SessionHeader({
               )}
             </div>
           </div>
+
+          <button
+            onClick={onToggleIndex}
+            className="p-2 rounded-lg hover:bg-muted transition-colors"
+            title={isIndexOpen ? 'Hide index' : 'Show index'}
+          >
+            {isIndexOpen ? (
+              <PanelLeftClose className="w-5 h-5" />
+            ) : (
+              <PanelLeftOpen className="w-5 h-5" />
+            )}
+          </button>
         </div>
       </div>
     </div>
@@ -96,48 +114,40 @@ export const ConversationViewer = memo(function ConversationViewer({
   filename,
   onBack,
 }: ConversationViewerProps) {
-  const [showCompactAgents, setShowCompactAgents] = useState(false);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const [isIndexOpen, setIsIndexOpen] = useState(true);
+  const [activeTurnIndex, setActiveTurnIndex] = useState(0);
+  const activeTurnRef = useRef(0);
+  const rafRef = useRef(0);
 
-  // Filter out compact agent turns when toggle is off
-  const visibleTurns = useMemo(() => {
-    if (showCompactAgents) return session.turns;
-    return session.turns.filter(turn => {
-      if (!turn.agentId) return true;
-      const info = session.agentRegistry.get(turn.agentId);
-      return !info?.isCompact;
-    });
-  }, [session.turns, session.agentRegistry, showCompactAgents]);
-
-  // Build a mapping from original turn indices to filtered indices for jump
-  const originalToFilteredIndex = useMemo(() => {
-    const map = new Map<number, number>();
-    let filteredIdx = 0;
-    for (let i = 0; i < session.turns.length; i++) {
-      const turn = session.turns[i];
-      const isVisible = !turn.agentId || showCompactAgents || !session.agentRegistry.get(turn.agentId)?.isCompact;
-      if (isVisible) {
-        map.set(i, filteredIdx);
-        filteredIdx++;
-      }
-    }
-    return map;
-  }, [session.turns, session.agentRegistry, showCompactAgents]);
+  const visibleTurns = session.turns;
 
   const regularAgentCount = useMemo(() => {
     return Array.from(session.agentRegistry.values()).filter(a => !a.isCompact).length;
   }, [session.agentRegistry]);
 
-  const handleJumpToTurn = useCallback((originalTurnIndex: number) => {
-    const filteredIndex = originalToFilteredIndex.get(originalTurnIndex);
-    if (filteredIndex !== undefined && virtuosoRef.current) {
-      virtuosoRef.current.scrollToIndex({
-        index: filteredIndex,
-        align: 'start',
-        behavior: 'smooth',
+  const handleJumpToTurn = useCallback((index: number) => {
+    virtuosoRef.current?.scrollToIndex({ index, align: 'start' });
+  }, []);
+
+  // Throttle via rAF so we update at most once per frame
+  const handleRangeChanged = useCallback((range: { startIndex: number; endIndex: number }) => {
+    activeTurnRef.current = range.startIndex;
+    if (!rafRef.current) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = 0;
+        setActiveTurnIndex(activeTurnRef.current);
       });
     }
-  }, [originalToFilteredIndex]);
+  }, []);
+
+  useEffect(() => {
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, []);
+
+  const toggleIndex = useCallback(() => {
+    setIsIndexOpen(prev => !prev);
+  }, []);
 
   const renderTurn = useCallback(
     (index: number) => {
@@ -152,39 +162,54 @@ export const ConversationViewer = memo(function ConversationViewer({
     [visibleTurns, session.agentRegistry]
   );
 
+  const virtuosoStyle = useMemo(() => ({ height: '100%' as const }), []);
+
+  const virtuosoComponents = useMemo(() => ({
+    List: ({ style, children, ...props }: React.ComponentPropsWithRef<'div'>) => (
+      <div
+        {...props}
+        style={style}
+        className="max-w-4xl mx-auto divide-y divide-border/50"
+      >
+        {children}
+      </div>
+    ),
+  }), []);
+
   return (
     <div className="h-screen flex flex-col">
-      <SessionHeader session={session} filename={filename} onBack={onBack} agentCount={regularAgentCount} />
+      <SessionHeader
+        session={session}
+        filename={filename}
+        onBack={onBack}
+        agentCount={regularAgentCount}
+        isIndexOpen={isIndexOpen}
+        onToggleIndex={toggleIndex}
+      />
 
-      {session.agentRegistry.size > 0 && (
-        <AgentLegend
-          agentRegistry={session.agentRegistry}
-          showCompactAgents={showCompactAgents}
-          onToggleCompactAgents={() => setShowCompactAgents(prev => !prev)}
-          onJumpToTurn={handleJumpToTurn}
-        />
-      )}
+      <div className="flex-1 overflow-hidden flex">
+        {isIndexOpen && (
+          <div className="w-[260px] shrink-0 border-r border-border bg-muted/30 overflow-hidden">
+            <ConversationIndex
+              turns={visibleTurns}
+              activeTurnIndex={activeTurnIndex}
+              onJumpToTurn={handleJumpToTurn}
+            />
+          </div>
+        )}
 
-      <div className="flex-1 overflow-hidden">
-        <Virtuoso
-          ref={virtuosoRef}
-          style={{ height: '100%' }}
-          totalCount={visibleTurns.length}
-          itemContent={renderTurn}
-          className="px-4"
-          components={{
-            List: ({ style, children, ...props }) => (
-              <div
-                {...props}
-                style={style}
-                className="max-w-4xl mx-auto divide-y divide-border/50"
-              >
-                {children}
-              </div>
-            ),
-          }}
-          overscan={5}
-        />
+        <div className="flex-1 overflow-hidden">
+          <Virtuoso
+            ref={virtuosoRef}
+            style={virtuosoStyle}
+            totalCount={visibleTurns.length}
+            itemContent={renderTurn}
+            rangeChanged={handleRangeChanged}
+            className="px-4"
+            components={virtuosoComponents}
+            overscan={5}
+          />
+        </div>
       </div>
     </div>
   );

@@ -297,6 +297,36 @@ export function groupIntoTurns(entries: LogEntry[]): ConversationTurn[] {
       const timeB = new Date(b.timestamp).getTime();
       return timeA - timeB;
     });
+
+    // Populate sectionAgentIds: for each system turn, collect agents spawned
+    // in the section between the previous system turn and this one
+    let prevSystemIdx = -1;
+    for (let idx = 0; idx < merged.length; idx++) {
+      if (merged[idx].type === 'system') {
+        const agentIds = new Set<string>();
+        // Scan turns in this section (from previous boundary to this one)
+        for (let j = prevSystemIdx + 1; j < idx; j++) {
+          const t = merged[j];
+          // Collect agents that appeared in this section
+          if (t.agentId) {
+            agentIds.add(t.agentId);
+          }
+          // Collect agents spawned via Task tool calls
+          if (t.toolExecutions) {
+            for (const tool of t.toolExecutions) {
+              if (tool.name === 'Task' && tool.agentStats?.agentId) {
+                agentIds.add(tool.agentStats.agentId);
+              }
+            }
+          }
+        }
+        if (agentIds.size > 0) {
+          merged[idx].sectionAgentIds = Array.from(agentIds);
+        }
+        prevSystemIdx = idx;
+      }
+    }
+
     return merged;
   }
 
@@ -317,45 +347,81 @@ const AGENT_COLORS = [
 ];
 const COMPACT_AGENT_COLOR = '#6b7280'; // grey
 
+interface TaskToolData {
+  description: string;
+  subagentType?: string;
+  stats?: AgentInfo['stats'];
+}
+
 function buildAgentRegistry(turns: ConversationTurn[]): Map<string, AgentInfo> {
   const registry = new Map<string, AgentInfo>();
 
-  // Pass 1: scan Task tool executions for agent stats (description, subagentType, stats)
-  const taskToolInfo = new Map<string, { description: string; subagentType?: string; stats?: AgentInfo['stats'] }>();
+  // Pass 1: scan Task tool executions for agent info
+  // Keyed by agentId when we have agentStats, otherwise collected in order for fallback
+  const matchedInfo = new Map<string, TaskToolData>();
+  const unmatchedInfo: TaskToolData[] = [];
+
   for (const turn of turns) {
     if (turn.toolExecutions) {
       for (const tool of turn.toolExecutions) {
-        if (tool.name === 'Task' && tool.agentStats?.agentId) {
+        if (tool.name === 'Task') {
           const input = tool.input as Record<string, unknown>;
-          taskToolInfo.set(tool.agentStats.agentId, {
-            description: input.description ? String(input.description) : input.prompt ? String(input.prompt).substring(0, 80) : 'Agent task',
+          const data: TaskToolData = {
+            description: input.description ? String(input.description) : input.prompt ? String(input.prompt).substring(0, 80) : '',
             subagentType: input.subagent_type ? String(input.subagent_type) : undefined,
-            stats: {
+            stats: tool.agentStats ? {
               totalToolUseCount: tool.agentStats.totalToolUseCount,
               totalTokens: tool.agentStats.totalTokens,
               totalDurationMs: tool.agentStats.totalDurationMs,
-            },
-          });
+            } : undefined,
+          };
+
+          if (tool.agentStats?.agentId) {
+            matchedInfo.set(tool.agentStats.agentId, data);
+          } else {
+            unmatchedInfo.push(data);
+          }
         }
       }
     }
   }
 
-  // Pass 2: scan all turns for unique agentId values, record first appearance
+  // Pass 2: scan all turns for unique agentId values, record first appearance + model
   const agentOrder: string[] = [];
+  const agentModels = new Map<string, string>();
+  for (const turn of turns) {
+    const agentId = turn.agentId;
+    if (agentId) {
+      // Capture model from assistant turns
+      if (turn.type === 'assistant' && turn.model && !agentModels.has(agentId)) {
+        agentModels.set(agentId, turn.model);
+      }
+    }
+  }
+
+  // Pass 3: build registry entries
+  let unmatchedIdx = 0;
   for (let i = 0; i < turns.length; i++) {
     const agentId = turns[i].agentId;
     if (agentId && !registry.has(agentId)) {
       agentOrder.push(agentId);
       const isCompact = agentId.startsWith('acompact-');
-      const info = taskToolInfo.get(agentId);
+
+      // Try matched info first, then fall back to unmatched by order
+      let info = matchedInfo.get(agentId);
+      if (!info && !isCompact && unmatchedIdx < unmatchedInfo.length) {
+        info = unmatchedInfo[unmatchedIdx++];
+      }
+
       const colorIndex = isCompact ? -1 : agentOrder.filter(id => !id.startsWith('acompact-')).length - 1;
+      const model = agentModels.get(agentId);
 
       registry.set(agentId, {
         agentId,
         agentNumber: agentOrder.length,
-        description: info?.description || 'Agent task',
+        description: info?.description || '',
         subagentType: info?.subagentType,
+        model: model ? model.replace('claude-', '').replace(/-\d{8}$/, '') : undefined,
         color: isCompact ? COMPACT_AGENT_COLOR : AGENT_COLORS[colorIndex % AGENT_COLORS.length],
         isCompact,
         stats: info?.stats,

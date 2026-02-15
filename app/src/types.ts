@@ -195,6 +195,7 @@ export interface ConversationTurn {
   compactTrigger?: string;
   preTokens?: number;
   summaryText?: string;
+  sectionAgentIds?: string[];
 
   // Agent context
   isSidechain?: boolean;
@@ -206,6 +207,7 @@ export interface AgentInfo {
   agentNumber: number;
   description: string;
   subagentType?: string;
+  model?: string;
   color: string;
   isCompact: boolean;
   stats?: {
