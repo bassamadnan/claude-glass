@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   GitBranch,
   FolderOpen,
+  LayoutGrid,
   Hash,
   Cpu,
   Clock,
@@ -22,12 +23,14 @@ interface ConversationViewerProps {
   session: ParsedSession;
   filename: string;
   onBack: () => void;
+  onOpenBrowser?: () => void;
 }
 
 const SessionHeader = memo(function SessionHeader({
   session,
   filename,
   onBack,
+  onOpenBrowser,
   agentCount,
   isIndexOpen,
   onToggleIndex,
@@ -35,6 +38,7 @@ const SessionHeader = memo(function SessionHeader({
   session: ParsedSession;
   filename: string;
   onBack: () => void;
+  onOpenBrowser?: () => void;
   agentCount: number;
   isIndexOpen: boolean;
   onToggleIndex: () => void;
@@ -46,10 +50,20 @@ const SessionHeader = memo(function SessionHeader({
           <button
             onClick={onBack}
             className="p-2 rounded-lg hover:bg-muted transition-colors"
-            title="Load another file"
+            title="Back to landing"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
+          {onOpenBrowser && (
+            <button
+              onClick={onOpenBrowser}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title="Browse projects"
+            >
+              <LayoutGrid className="w-4 h-4" />
+              Browse
+            </button>
+          )}
 
           <div className="flex-1 min-w-0">
             <h1 className="font-semibold truncate">{filename}</h1>
@@ -115,6 +129,7 @@ export const ConversationViewer = memo(function ConversationViewer({
   session,
   filename,
   onBack,
+  onOpenBrowser,
 }: ConversationViewerProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [isIndexOpen, setIsIndexOpen] = useState(true);
@@ -194,6 +209,7 @@ export const ConversationViewer = memo(function ConversationViewer({
         session={session}
         filename={filename}
         onBack={onBack}
+        onOpenBrowser={onOpenBrowser}
         agentCount={regularAgentCount}
         isIndexOpen={isIndexOpen}
         onToggleIndex={toggleIndex}

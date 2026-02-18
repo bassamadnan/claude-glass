@@ -1,19 +1,15 @@
 import { useState, useCallback, useEffect } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { ConversationViewer } from './components/ConversationViewer';
+import { ProjectBrowser } from './components/ProjectBrowser';
 import { parseSession } from './lib/logParser';
 import type { ParsedSession } from './types';
 
 // Dev preload: files in public/logs/ that get auto-loaded
 const DEV_PRELOAD_FILES = [
   '/logs/d8a79d4a-282f-4642-8b60-f0bc8fe645e4.jsonl',
-  '/logs/d8a79d4a-282f-4642-8b60-f0bc8fe645e4/subagents/agent-a17ddfe.jsonl',
-  '/logs/d8a79d4a-282f-4642-8b60-f0bc8fe645e4/subagents/agent-a43e389.jsonl',
-  '/logs/d8a79d4a-282f-4642-8b60-f0bc8fe645e4/subagents/agent-a96844f.jsonl',
   '/logs/d8a79d4a-282f-4642-8b60-f0bc8fe645e4/subagents/agent-a9f2ca8.jsonl',
   '/logs/d8a79d4a-282f-4642-8b60-f0bc8fe645e4/subagents/agent-ab73ab5.jsonl',
-  '/logs/d8a79d4a-282f-4642-8b60-f0bc8fe645e4/subagents/agent-ac09963.jsonl',
-  '/logs/d8a79d4a-282f-4642-8b60-f0bc8fe645e4/subagents/agent-ac48237.jsonl',
   '/logs/d8a79d4a-282f-4642-8b60-f0bc8fe645e4/subagents/agent-acompact-5e9929.jsonl',
   '/logs/d8a79d4a-282f-4642-8b60-f0bc8fe645e4/subagents/agent-acompact-c80039.jsonl',
   '/logs/d8a79d4a-282f-4642-8b60-f0bc8fe645e4/subagents/agent-af9b190.jsonl',
@@ -24,6 +20,7 @@ function App() {
   const [filename, setFilename] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [browserOpen, setBrowserOpen] = useState(false);
 
   // Auto-load dev logs on mount
   useEffect(() => {
@@ -82,6 +79,11 @@ function App() {
     setError(null);
   }, []);
 
+  const handleBrowserSelect = useCallback((files: { content: string; filename: string }[], displayName?: string) => {
+    setBrowserOpen(false);
+    handleFileLoad(files, displayName);
+  }, [handleFileLoad]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center p-8">
@@ -124,15 +126,32 @@ function App() {
 
   if (session) {
     return (
-      <ConversationViewer
-        session={session}
-        filename={filename}
-        onBack={handleBack}
-      />
+      <>
+        <ConversationViewer
+          session={session}
+          filename={filename}
+          onBack={handleBack}
+          onOpenBrowser={() => setBrowserOpen(true)}
+        />
+        <ProjectBrowser
+          isOpen={browserOpen}
+          onClose={() => setBrowserOpen(false)}
+          onSessionSelect={handleBrowserSelect}
+        />
+      </>
     );
   }
 
-  return <FileUpload onFileLoad={handleFileLoad} />;
+  return (
+    <>
+      <FileUpload onFileLoad={handleFileLoad} onOpenBrowser={() => setBrowserOpen(true)} />
+      <ProjectBrowser
+        isOpen={browserOpen}
+        onClose={() => setBrowserOpen(false)}
+        onSessionSelect={handleBrowserSelect}
+      />
+    </>
+  );
 }
 
 export default App;

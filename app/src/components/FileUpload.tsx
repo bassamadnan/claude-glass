@@ -1,16 +1,15 @@
 import { useCallback, useState } from 'react';
 import { Upload, FileText, X, FolderOpen } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { ProjectBrowser } from './ProjectBrowser';
 
 interface FileUploadProps {
   onFileLoad: (files: { content: string; filename: string }[], displayName?: string) => void;
+  onOpenBrowser: () => void;
 }
 
-export function FileUpload({ onFileLoad }: FileUploadProps) {
+export function FileUpload({ onFileLoad, onOpenBrowser }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [browserOpen, setBrowserOpen] = useState(false);
 
   const handleFiles = useCallback(
     (files: FileList) => {
@@ -48,11 +47,6 @@ export function FileUpload({ onFileLoad }: FileUploadProps) {
     if (e.target.files && e.target.files.length > 0) handleFiles(e.target.files);
   }, [handleFiles]);
 
-  const handleSessionSelect = useCallback((files: { content: string; filename: string }[], displayName?: string) => {
-    setBrowserOpen(false);
-    onFileLoad(files, displayName);
-  }, [onFileLoad]);
-
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-8">
       <div className="max-w-2xl w-full">
@@ -68,7 +62,7 @@ export function FileUpload({ onFileLoad }: FileUploadProps) {
         {/* Browse projects button — primary action */}
         <div className="mb-6">
           <button
-            onClick={() => setBrowserOpen(true)}
+            onClick={onOpenBrowser}
             className="w-full px-5 py-4 bg-accent/10 hover:bg-accent/20 border border-accent/30 hover:border-accent/50 rounded-xl transition-all flex items-center justify-center gap-3"
           >
             <FolderOpen className="w-5 h-5 text-accent" />
@@ -121,11 +115,6 @@ export function FileUpload({ onFileLoad }: FileUploadProps) {
         )}
       </div>
 
-      <ProjectBrowser
-        isOpen={browserOpen}
-        onClose={() => setBrowserOpen(false)}
-        onSessionSelect={handleSessionSelect}
-      />
     </div>
   );
 }
