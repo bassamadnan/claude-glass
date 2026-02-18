@@ -12,13 +12,14 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Github,
+  LayoutList,
 } from 'lucide-react';
 
 const GITHUB_URL = 'https://github.com/bassamadnan/claude-glass';
 import { TurnViewer } from './TurnViewer';
 import { TurnGroupViewer } from './TurnGroupViewer';
 import { ConversationIndex } from './ConversationIndex';
-import { formatTokens, formatDate } from '../lib/utils';
+import { cn, formatTokens, formatDate } from '../lib/utils';
 import { formatCost } from '../lib/pricing';
 import type { ParsedSession, ConversationTurn } from '../types';
 
@@ -41,6 +42,8 @@ const SessionHeader = memo(function SessionHeader({
   isIndexOpen,
   onToggleIndex,
   isShared,
+  focusMode,
+  onToggleFocusMode,
 }: {
   session: ParsedSession;
   filename: string;
@@ -50,6 +53,8 @@ const SessionHeader = memo(function SessionHeader({
   isIndexOpen: boolean;
   onToggleIndex: () => void;
   isShared?: boolean;
+  focusMode: boolean;
+  onToggleFocusMode: () => void;
 }) {
   return (
     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border">
@@ -123,6 +128,17 @@ const SessionHeader = memo(function SessionHeader({
           </div>
 
           <button
+            onClick={onToggleFocusMode}
+            className={cn(
+              'p-2 rounded-lg transition-colors',
+              focusMode ? 'bg-accent/20 text-accent hover:bg-accent/30' : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+            )}
+            title={focusMode ? 'Exit focus mode' : 'Focus mode: show prompts + file activity only'}
+          >
+            <LayoutList className="w-5 h-5" />
+          </button>
+
+          <button
             onClick={onToggleIndex}
             className="p-2 rounded-lg hover:bg-muted transition-colors"
             title={isIndexOpen ? 'Hide index' : 'Show index'}
@@ -160,6 +176,7 @@ export const ConversationViewer = memo(function ConversationViewer({
 }: ConversationViewerProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [isIndexOpen, setIsIndexOpen] = useState(true);
+  const [focusMode, setFocusMode] = useState(false);
   const [activeTurnIndex, setActiveTurnIndex] = useState(0);
   const activeTurnRef = useRef(0);
   const rafRef = useRef(0);
@@ -226,7 +243,7 @@ export const ConversationViewer = memo(function ConversationViewer({
         const agentInfo = turn.agentId ? session.agentRegistry.get(turn.agentId) : undefined;
         const canShare = !isShared && onShareFromTurn && turn.type === 'user' && !turn.agentId;
         return (
-          <div className="py-4">
+          <div className={focusMode ? 'py-2' : 'py-4'}>
             <TurnViewer
               turn={turn}
               agentInfo={agentInfo}
@@ -234,17 +251,18 @@ export const ConversationViewer = memo(function ConversationViewer({
               onShare={canShare ? () => onShareFromTurn(turn) : undefined}
               shareLoading={shareLoading}
               messageCost={messageCosts.get(group.id)}
+              focusMode={focusMode}
             />
           </div>
         );
       }
       return (
-        <div className="py-4">
-          <TurnGroupViewer group={group} agentRegistry={session.agentRegistry} />
+        <div className={focusMode ? 'py-1' : 'py-4'}>
+          <TurnGroupViewer group={group} agentRegistry={session.agentRegistry} focusMode={focusMode} />
         </div>
       );
     },
-    [turnGroups, session.agentRegistry, onShareFromTurn, shareLoading, messageCosts]
+    [turnGroups, session.agentRegistry, onShareFromTurn, shareLoading, messageCosts, focusMode]
   );
 
   const virtuosoStyle = useMemo(() => ({ height: '100%' as const }), []);
@@ -272,10 +290,12 @@ export const ConversationViewer = memo(function ConversationViewer({
         isIndexOpen={isIndexOpen}
         onToggleIndex={toggleIndex}
         isShared={isShared}
+        focusMode={focusMode}
+        onToggleFocusMode={() => setFocusMode(f => !f)}
       />
 
       <div className="flex-1 overflow-hidden flex">
-        {isIndexOpen && (
+        {isIndexOpen && !focusMode && (
           <div className="w-[260px] shrink-0 border-r border-border bg-muted/30 overflow-hidden">
             <ConversationIndex
               turnGroups={turnGroups}

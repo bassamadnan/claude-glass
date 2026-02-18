@@ -30,6 +30,7 @@ interface TurnViewerProps {
   onShare?: () => void;
   shareLoading?: boolean;
   messageCost?: number;
+  focusMode?: boolean;
 }
 
 // ---- Side-by-side diff for Edit tool ----
@@ -655,12 +656,38 @@ const TextResponse = memo(function TextResponse({
   );
 });
 
-export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegistry, onShare, shareLoading, messageCost }: TurnViewerProps) {
+export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegistry, onShare, shareLoading, messageCost, focusMode }: TurnViewerProps) {
   const [showToolsModal, setShowToolsModal] = useState(false);
   const [showThinkingModal, setShowThinkingModal] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (turn.type === 'user') {
+    // Focus mode: always expanded, no collapse controls
+    if (focusMode) {
+      return (
+        <div
+          className="flex gap-4"
+          style={agentInfo ? { borderLeft: `3px solid ${agentInfo.color}`, paddingLeft: '12px' } : undefined}
+        >
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-user/20 flex items-center justify-center">
+            <User className="w-4 h-4 text-user" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-semibold text-user">User</span>
+              <span className="text-xs text-muted-foreground">{formatTimestamp(turn.timestamp)}</span>
+              {messageCost != null && messageCost > 0 && (
+                <span className="text-xs text-emerald-400/70">{formatCost(messageCost)}</span>
+              )}
+            </div>
+            <div className="bg-user/5 rounded-lg px-4 py-2 border border-user/10">
+              <p className="text-sm whitespace-pre-wrap">{turn.userContent}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     const contentPreview = turn.userContent && turn.userContent.length > 100
       ? turn.userContent.substring(0, 100) + '...'
       : turn.userContent;
@@ -732,7 +759,9 @@ export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegis
     );
   }
 
-  // System turn (compact boundary)
+  // System turn (compact boundary) — hidden in focus mode
+  if (turn.type === 'system' && focusMode) return null;
+
   if (turn.type === 'system') {
     const sectionAgents = turn.sectionAgentIds
       ?.map(id => agentRegistry?.get(id))
@@ -795,6 +824,41 @@ export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegis
             {turn.summaryText}
           </div>
         )}
+      </div>
+    );
+  }
+
+  // Focus mode: assistant turn shows only file activity
+  if (focusMode) {
+    const files: { name: string; action: 'read' | 'write' }[] = [];
+    for (const tool of turn.toolExecutions ?? []) {
+      const input = tool.input as Record<string, unknown>;
+      if (tool.name === 'Read' && input.file_path)
+        files.push({ name: String(input.file_path).split('/').pop() || '', action: 'read' });
+      else if ((tool.name === 'Write' || tool.name === 'Edit') && input.file_path)
+        files.push({ name: String(input.file_path).split('/').pop() || '', action: 'write' });
+    }
+    const seen = new Set<string>();
+    const dedupedFiles = files.filter(f => seen.has(f.name) ? false : (seen.add(f.name), true));
+
+    if (dedupedFiles.length === 0) return null;
+
+    return (
+      <div
+        className="flex gap-4 ml-10 pl-2"
+        style={agentInfo ? { borderLeft: `2px solid ${agentInfo.color}40` } : { borderLeft: '2px solid hsl(var(--border))' }}
+      >
+        <div className="flex flex-wrap gap-1 py-1">
+          {dedupedFiles.map((f, i) => (
+            <span key={i} className={cn(
+              'text-[11px] px-1.5 py-0.5 rounded font-mono flex items-center gap-1',
+              f.action === 'write' ? 'bg-orange-500/10 text-orange-400' : 'bg-blue-500/10 text-blue-400'
+            )}>
+              {f.action === 'write' ? <Pencil className="w-2.5 h-2.5" /> : <Eye className="w-2.5 h-2.5" />}
+              {f.name}
+            </span>
+          ))}
+        </div>
       </div>
     );
   }

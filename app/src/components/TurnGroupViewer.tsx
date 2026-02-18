@@ -4,17 +4,20 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  Eye,
   Pencil,
   Layers,
 } from 'lucide-react';
 import { TurnViewer } from './TurnViewer';
 import { EditDiffView } from './TurnViewer';
+import { cn } from '../lib/utils';
 import { formatTimestamp, formatTimeOnly, formatTokens } from '../lib/utils';
 import type { TurnGroup, AgentInfo } from '../types';
 
 interface TurnGroupViewerProps {
   group: TurnGroup;
   agentRegistry: Map<string, AgentInfo>;
+  focusMode?: boolean;
 }
 
 /** Collect all Edit tool diffs from a group, grouped by file path */
@@ -61,6 +64,7 @@ function countEditsPerFile(group: TurnGroup): Map<string, number> {
 export const TurnGroupViewer = memo(function TurnGroupViewer({
   group,
   agentRegistry,
+  focusMode,
 }: TurnGroupViewerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedTurns, setExpandedTurns] = useState<Set<number>>(new Set());
@@ -74,6 +78,42 @@ export const TurnGroupViewer = memo(function TurnGroupViewer({
     if (turn.usage) {
       totalTokens += turn.usage.input_tokens + turn.usage.output_tokens;
     }
+  }
+
+  // Focus mode: show only file activity across all turns
+  if (focusMode) {
+    const files: { name: string; action: 'read' | 'write' }[] = [];
+    for (const turn of group.turns) {
+      for (const tool of turn.toolExecutions ?? []) {
+        const input = tool.input as Record<string, unknown>;
+        if (tool.name === 'Read' && input.file_path)
+          files.push({ name: String(input.file_path).split('/').pop() || '', action: 'read' });
+        else if ((tool.name === 'Write' || tool.name === 'Edit') && input.file_path)
+          files.push({ name: String(input.file_path).split('/').pop() || '', action: 'write' });
+      }
+    }
+    const seen = new Set<string>();
+    const dedupedFiles = files.filter(f => seen.has(f.name) ? false : (seen.add(f.name), true));
+    if (dedupedFiles.length === 0) return null;
+    const agentInfo = firstTurn.agentId ? agentRegistry.get(firstTurn.agentId) : undefined;
+    return (
+      <div
+        className="flex gap-4 ml-10 pl-2"
+        style={agentInfo ? { borderLeft: `2px solid ${agentInfo.color}40` } : { borderLeft: '2px solid hsl(var(--border))' }}
+      >
+        <div className="flex flex-wrap gap-1 py-1">
+          {dedupedFiles.map((f, i) => (
+            <span key={i} className={cn(
+              'text-[11px] px-1.5 py-0.5 rounded font-mono flex items-center gap-1',
+              f.action === 'write' ? 'bg-orange-500/10 text-orange-400' : 'bg-blue-500/10 text-blue-400'
+            )}>
+              {f.action === 'write' ? <Pencil className="w-2.5 h-2.5" /> : <Eye className="w-2.5 h-2.5" />}
+              {f.name}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   const editCounts = countEditsPerFile(group);
