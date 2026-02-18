@@ -133,11 +133,13 @@ function App() {
     setShareError(null);
     try {
       const lines = rawContent.split('\n').filter(Boolean);
-      const startIdx = lines.findIndex(line => {
-        try { return (JSON.parse(line) as { uuid?: string }).uuid === turn.id; }
+      // Filter ALL lines (main + subagents) by timestamp so subagent entries
+      // from before the share point don't appear in the shared session.
+      const startTimestamp = turn.timestamp;
+      const trimmed = lines.filter(line => {
+        try { const t = (JSON.parse(line) as { timestamp?: string }).timestamp; return !!t && t >= startTimestamp; }
         catch { return false; }
-      });
-      const trimmed = startIdx >= 0 ? lines.slice(startIdx).join('\n') : rawContent;
+      }).join('\n');
       const id = await uploadSession(trimmed);
       const url = buildShareUrl(id);
       setShareState({ url, copied: false });

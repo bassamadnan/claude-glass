@@ -200,6 +200,9 @@ export interface ConversationTurn {
   // Agent context
   isSidechain?: boolean;
   agentId?: string;
+
+  // Cost in USD
+  cost?: number;
 }
 
 export interface AgentInfo {
@@ -223,6 +226,7 @@ export interface TurnGroup {
   turns: ConversationTurn[];
   editedFiles: string[];  // files edited across the group
   totalToolCalls: number;
+  totalCost: number;  // includes direct turns + recursively attributed subagent costs
 }
 
 export interface ParsedSession {
@@ -231,9 +235,11 @@ export interface ParsedSession {
   cwd: string;
   gitBranch?: string;
   turns: ConversationTurn[];
+  groups: TurnGroup[];
   totalTokens: {
     input: number;
     output: number;
   };
+  totalCost: number;
   agentRegistry: Map<string, AgentInfo>;
 }

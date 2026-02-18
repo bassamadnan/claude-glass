@@ -18,8 +18,8 @@ const GITHUB_URL = 'https://github.com/bassamadnan/claude-glass';
 import { TurnViewer } from './TurnViewer';
 import { TurnGroupViewer } from './TurnGroupViewer';
 import { ConversationIndex } from './ConversationIndex';
-import { groupTurns } from '../lib/logParser';
 import { formatTokens, formatDate } from '../lib/utils';
+import { formatCost } from '../lib/pricing';
 import type { ParsedSession, ConversationTurn } from '../types';
 
 interface ConversationViewerProps {
@@ -87,6 +87,11 @@ const SessionHeader = memo(function SessionHeader({
                 <Cpu className="w-3.5 h-3.5" />
                 {formatTokens(session.totalTokens.input + session.totalTokens.output)} tokens
               </span>
+              {session.totalCost > 0 && (
+                <span className="flex items-center gap-1 text-emerald-400/80">
+                  {formatCost(session.totalCost)}
+                </span>
+              )}
               {agentCount > 0 && (
                 <span className="flex items-center gap-1">
                   <Users className="w-3.5 h-3.5" />
@@ -159,13 +164,35 @@ export const ConversationViewer = memo(function ConversationViewer({
   const activeTurnRef = useRef(0);
   const rafRef = useRef(0);
 
-  const visibleTurns = session.turns;
-
-  const turnGroups = useMemo(() => groupTurns(visibleTurns), [visibleTurns]);
+  const turnGroups = session.groups;
 
   const regularAgentCount = useMemo(() => {
     return Array.from(session.agentRegistry.values()).filter(a => !a.isCompact).length;
   }, [session.agentRegistry]);
+
+  // For each user message, sum ALL assistant turn costs (any agent) between
+  // this message and the next user message — timestamp-based, no agentId needed.
+  const messageCosts = useMemo(() => {
+    const costs = new Map<string, number>();
+    const userGroups = turnGroups
+      .map((g, i) => ({ i, g }))
+      .filter(({ g }) => g.turns[0].type === 'user' && !g.turns[0].agentId);
+
+    for (let u = 0; u < userGroups.length; u++) {
+      const { g } = userGroups[u];
+      const startTs = g.turns[0].timestamp;
+      const endTs = u + 1 < userGroups.length ? userGroups[u + 1].g.turns[0].timestamp : null;
+      let cost = 0;
+      for (const turn of session.turns) {
+        if (turn.type !== 'assistant') continue;
+        if (turn.timestamp < startTs) continue;
+        if (endTs && turn.timestamp >= endTs) continue;
+        cost += turn.cost ?? 0;
+      }
+      costs.set(g.id, cost);
+    }
+    return costs;
+  }, [turnGroups, session.turns]);
 
   const handleJumpToTurn = useCallback((index: number) => {
     virtuosoRef.current?.scrollToIndex({ index, align: 'start' });
@@ -206,6 +233,7 @@ export const ConversationViewer = memo(function ConversationViewer({
               agentRegistry={session.agentRegistry}
               onShare={canShare ? () => onShareFromTurn(turn) : undefined}
               shareLoading={shareLoading}
+              messageCost={messageCosts.get(group.id)}
             />
           </div>
         );
@@ -216,7 +244,7 @@ export const ConversationViewer = memo(function ConversationViewer({
         </div>
       );
     },
-    [turnGroups, session.agentRegistry, onShareFromTurn, shareLoading]
+    [turnGroups, session.agentRegistry, onShareFromTurn, shareLoading, messageCosts]
   );
 
   const virtuosoStyle = useMemo(() => ({ height: '100%' as const }), []);

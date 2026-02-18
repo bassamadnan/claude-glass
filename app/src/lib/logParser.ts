@@ -15,6 +15,7 @@ import type {
   ContentBlockToolResult,
   ToolExecution,
 } from '../types';
+import { calculateTurnCost } from './pricing';
 
 function isUserEntry(entry: LogEntry): entry is UserLogEntry {
   return entry.type === 'user';
@@ -233,6 +234,8 @@ export function groupIntoTurns(entries: LogEntry[]): ConversationTurn[] {
       let totalUsage = {
         input: 0,
         output: 0,
+        cacheCreation: 0,
+        cacheRead: 0,
       };
 
       for (const assistantEntry of assistantEntries) {
@@ -260,13 +263,23 @@ export function groupIntoTurns(entries: LogEntry[]): ConversationTurn[] {
         }
 
         if (assistantEntry.message.usage) {
-          totalUsage.input += assistantEntry.message.usage.input_tokens || 0;
-          totalUsage.output += assistantEntry.message.usage.output_tokens || 0;
+          const u = assistantEntry.message.usage;
+          totalUsage.input += u.input_tokens || 0;
+          totalUsage.output += u.output_tokens || 0;
+          totalUsage.cacheCreation += u.cache_creation_input_tokens || 0;
+          totalUsage.cacheRead += u.cache_read_input_tokens || 0;
         }
       }
 
       // Only add turn if there's actual content
       if (thinking.length > 0 || toolExecutions.length > 0 || textContent.length > 0) {
+        const model = assistantEntries[0].message.model;
+        const usage = {
+          input_tokens: totalUsage.input,
+          output_tokens: totalUsage.output,
+          cache_creation_input_tokens: totalUsage.cacheCreation,
+          cache_read_input_tokens: totalUsage.cacheRead,
+        };
         turns.push({
           id: assistantEntries[0].uuid || `turn-${i}`,
           timestamp: assistantEntries[0].timestamp,
@@ -274,13 +287,9 @@ export function groupIntoTurns(entries: LogEntry[]): ConversationTurn[] {
           thinking: thinking.length > 0 ? thinking : undefined,
           toolExecutions: toolExecutions.length > 0 ? toolExecutions : undefined,
           textContent: textContent.length > 0 ? textContent : undefined,
-          model: assistantEntries[0].message.model,
-          usage: {
-            input_tokens: totalUsage.input,
-            output_tokens: totalUsage.output,
-            cache_creation_input_tokens: 0,
-            cache_read_input_tokens: 0,
-          },
+          model,
+          usage,
+          cost: model ? calculateTurnCost(model, usage) : 0,
           isSidechain: assistantEntries[0].isSidechain,
           agentId: assistantEntries[0].agentId,
         });
@@ -465,6 +474,7 @@ export function groupTurns(turns: ConversationTurn[]): TurnGroup[] {
       turns: currentGroup,
       editedFiles: Array.from(allFiles),
       totalToolCalls: totalTools,
+      totalCost: 0,
     });
     currentGroup = [];
     currentFiles = new Set();
@@ -479,6 +489,7 @@ export function groupTurns(turns: ConversationTurn[]): TurnGroup[] {
         turns: [turn],
         editedFiles: [],
         totalToolCalls: 0,
+        totalCost: 0,
       });
       continue;
     }
@@ -536,16 +547,28 @@ export function parseSession(text: string): ParsedSession {
 
   const agentRegistry = buildAgentRegistry(turns);
 
+  // Compute groups — totalCost is just the direct cost of turns in the group.
+  // Per-message attribution (including subagents) is done in ConversationViewer
+  // via timestamp-based slicing of session.turns.
+  const groups = groupTurns(turns);
+  for (const group of groups) {
+    group.totalCost = group.turns.reduce((sum, t) => sum + (t.cost ?? 0), 0);
+  }
+
+  const totalCost = turns.reduce((sum, t) => sum + (t.cost ?? 0), 0);
+
   return {
     sessionId: firstUser?.sessionId || 'unknown',
     version: firstUser?.version || 'unknown',
     cwd: firstUser?.cwd || 'unknown',
     gitBranch: firstUser?.gitBranch,
     turns,
+    groups,
     totalTokens: {
       input: totalInput,
       output: totalOutput,
     },
+    totalCost,
     agentRegistry,
   };
 }

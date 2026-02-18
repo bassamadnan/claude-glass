@@ -20,6 +20,7 @@ import { Modal } from './Modal';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { CodeBlock } from './CodeBlock';
 import { cn, formatTimestamp, formatTokens } from '../lib/utils';
+import { formatCost } from '../lib/pricing';
 import type { ConversationTurn, ToolExecution, AgentInfo } from '../types';
 
 interface TurnViewerProps {
@@ -28,6 +29,7 @@ interface TurnViewerProps {
   agentRegistry?: Map<string, AgentInfo>;
   onShare?: () => void;
   shareLoading?: boolean;
+  messageCost?: number;
 }
 
 // ---- Side-by-side diff for Edit tool ----
@@ -653,7 +655,7 @@ const TextResponse = memo(function TextResponse({
   );
 });
 
-export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegistry, onShare, shareLoading }: TurnViewerProps) {
+export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegistry, onShare, shareLoading, messageCost }: TurnViewerProps) {
   const [showToolsModal, setShowToolsModal] = useState(false);
   const [showThinkingModal, setShowThinkingModal] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -681,6 +683,9 @@ export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegis
               <span className="text-xs text-muted-foreground">
                 {formatTimestamp(turn.timestamp)}
               </span>
+              {messageCost != null && messageCost > 0 && (
+                <span className="text-xs text-emerald-400/70">{formatCost(messageCost)}</span>
+              )}
               {agentInfo && (
                 <span
                   className="text-xs px-2 py-0.5 rounded-full border font-medium"
