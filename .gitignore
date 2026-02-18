@@ -1,3 +1,6 @@
 # Personal log files
 logs/
 sample_log.jsonl
+
+# Wrangler local cache
+.wrangler/

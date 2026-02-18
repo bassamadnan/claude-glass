@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
-import { Upload, FileText, X, FolderOpen } from 'lucide-react';
+import { Upload, FileText, X, FolderOpen, Github } from 'lucide-react';
+
+const GITHUB_URL = 'https://github.com/bassamadnan/claude-glass';
 import { cn } from '../lib/utils';
 
 interface FileUploadProps {
@@ -51,9 +53,20 @@ export function FileUpload({ onFileLoad, onOpenBrowser }: FileUploadProps) {
     <div className="flex flex-col items-center justify-center min-h-screen p-8">
       <div className="max-w-2xl w-full">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-accent to-blue-400 bg-clip-text text-transparent">
-            Claude Glass
-          </h1>
+          <div className="flex items-center justify-center gap-3 mb-2">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-accent to-blue-400 bg-clip-text text-transparent">
+              Claude Glass
+            </h1>
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="View on GitHub"
+            >
+              <Github className="w-6 h-6" />
+            </a>
+          </div>
           <p className="text-muted-foreground">
             A viewer for Claude CLI session logs
           </p>

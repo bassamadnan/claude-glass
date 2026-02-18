@@ -26,6 +26,8 @@ interface TurnViewerProps {
   turn: ConversationTurn;
   agentInfo?: AgentInfo;
   agentRegistry?: Map<string, AgentInfo>;
+  onShare?: () => void;
+  shareLoading?: boolean;
 }
 
 // ---- Side-by-side diff for Edit tool ----
@@ -651,7 +653,7 @@ const TextResponse = memo(function TextResponse({
   );
 });
 
-export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegistry }: TurnViewerProps) {
+export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegistry, onShare, shareLoading }: TurnViewerProps) {
   const [showToolsModal, setShowToolsModal] = useState(false);
   const [showThinkingModal, setShowThinkingModal] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -663,7 +665,7 @@ export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegis
 
     return (
       <div
-        className="flex gap-4"
+        className="flex gap-4 group"
         style={agentInfo ? { borderLeft: `3px solid ${agentInfo.color}`, paddingLeft: '12px' } : undefined}
       >
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-user/20 flex items-center justify-center">
@@ -705,6 +707,18 @@ export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegis
           ) : (
             <div className="bg-user/5 rounded-lg px-4 py-2 border border-user/10">
               <p className="text-sm text-muted-foreground truncate">{contentPreview}</p>
+            </div>
+          )}
+          {onShare && (
+            <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={e => { e.stopPropagation(); onShare(); }}
+                disabled={shareLoading}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                <ExternalLink className="w-3 h-3" />
+                {shareLoading ? 'Uploading…' : 'Share from here'}
+              </button>
             </div>
           )}
         </div>

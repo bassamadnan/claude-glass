@@ -11,19 +11,25 @@ import {
   Users,
   PanelLeftClose,
   PanelLeftOpen,
+  Github,
 } from 'lucide-react';
+
+const GITHUB_URL = 'https://github.com/bassamadnan/claude-glass';
 import { TurnViewer } from './TurnViewer';
 import { TurnGroupViewer } from './TurnGroupViewer';
 import { ConversationIndex } from './ConversationIndex';
 import { groupTurns } from '../lib/logParser';
 import { formatTokens, formatDate } from '../lib/utils';
-import type { ParsedSession } from '../types';
+import type { ParsedSession, ConversationTurn } from '../types';
 
 interface ConversationViewerProps {
   session: ParsedSession;
   filename: string;
   onBack: () => void;
   onOpenBrowser?: () => void;
+  onShareFromTurn?: (turn: ConversationTurn) => void;
+  shareLoading?: boolean;
+  isShared?: boolean;
 }
 
 const SessionHeader = memo(function SessionHeader({
@@ -34,6 +40,7 @@ const SessionHeader = memo(function SessionHeader({
   agentCount,
   isIndexOpen,
   onToggleIndex,
+  isShared,
 }: {
   session: ParsedSession;
   filename: string;
@@ -42,19 +49,22 @@ const SessionHeader = memo(function SessionHeader({
   agentCount: number;
   isIndexOpen: boolean;
   onToggleIndex: () => void;
+  isShared?: boolean;
 }) {
   return (
     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border">
       <div className="max-w-4xl mx-auto px-4 py-4">
         <div className="flex items-center gap-4">
-          <button
-            onClick={onBack}
-            className="p-2 rounded-lg hover:bg-muted transition-colors"
-            title="Back to landing"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          {onOpenBrowser && (
+          {!isShared && (
+            <button
+              onClick={onBack}
+              className="p-2 rounded-lg hover:bg-muted transition-colors"
+              title="Back to landing"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          )}
+          {!isShared && onOpenBrowser && (
             <button
               onClick={onOpenBrowser}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
@@ -67,46 +77,55 @@ const SessionHeader = memo(function SessionHeader({
 
           <div className="flex-1 min-w-0">
             <h1 className="font-semibold truncate">{filename}</h1>
+            {/* Line 1: stats */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground mt-1">
-              <span className="flex items-center gap-1">
-                <FolderOpen className="w-3.5 h-3.5" />
-                <span className="truncate max-w-[200px]" title={session.cwd}>
-                  {session.cwd.split('/').slice(-2).join('/')}
-                </span>
-              </span>
-
-              {session.gitBranch && (
-                <span className="flex items-center gap-1">
-                  <GitBranch className="w-3.5 h-3.5" />
-                  {session.gitBranch}
-                </span>
-              )}
-
               <span className="flex items-center gap-1">
                 <Hash className="w-3.5 h-3.5" />
                 {session.turns.length} turns
               </span>
-
               <span className="flex items-center gap-1">
                 <Cpu className="w-3.5 h-3.5" />
                 {formatTokens(session.totalTokens.input + session.totalTokens.output)} tokens
               </span>
-
               {agentCount > 0 && (
                 <span className="flex items-center gap-1">
                   <Users className="w-3.5 h-3.5" />
                   {agentCount} agents
                 </span>
               )}
-
+            </div>
+            {/* Line 2: context */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground/70 mt-0.5">
+              <span className="flex items-center gap-1">
+                <FolderOpen className="w-3 h-3" />
+                <span className="truncate max-w-[200px]" title={session.cwd}>
+                  {session.cwd.split('/').slice(-2).join('/')}
+                </span>
+              </span>
+              {session.gitBranch && (
+                <span className="flex items-center gap-1">
+                  <GitBranch className="w-3 h-3" />
+                  {session.gitBranch}
+                </span>
+              )}
               {session.turns.length > 0 && (
                 <span className="flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5" />
+                  <Clock className="w-3 h-3" />
                   {formatDate(session.turns[0].timestamp)}
                 </span>
               )}
             </div>
           </div>
+
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            title="View on GitHub"
+          >
+            <Github className="w-5 h-5" />
+          </a>
 
           <button
             onClick={onToggleIndex}
@@ -130,6 +149,9 @@ export const ConversationViewer = memo(function ConversationViewer({
   filename,
   onBack,
   onOpenBrowser,
+  onShareFromTurn,
+  shareLoading,
+  isShared,
 }: ConversationViewerProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [isIndexOpen, setIsIndexOpen] = useState(true);
@@ -148,6 +170,7 @@ export const ConversationViewer = memo(function ConversationViewer({
   const handleJumpToTurn = useCallback((index: number) => {
     virtuosoRef.current?.scrollToIndex({ index, align: 'start' });
   }, []);
+
 
   // Throttle via rAF so we update at most once per frame
   const handleRangeChanged = useCallback((range: { startIndex: number; endIndex: number }) => {
@@ -174,9 +197,16 @@ export const ConversationViewer = memo(function ConversationViewer({
       if (group.turns.length === 1) {
         const turn = group.turns[0];
         const agentInfo = turn.agentId ? session.agentRegistry.get(turn.agentId) : undefined;
+        const canShare = !isShared && onShareFromTurn && turn.type === 'user' && !turn.agentId;
         return (
           <div className="py-4">
-            <TurnViewer turn={turn} agentInfo={agentInfo} agentRegistry={session.agentRegistry} />
+            <TurnViewer
+              turn={turn}
+              agentInfo={agentInfo}
+              agentRegistry={session.agentRegistry}
+              onShare={canShare ? () => onShareFromTurn(turn) : undefined}
+              shareLoading={shareLoading}
+            />
           </div>
         );
       }
@@ -186,7 +216,7 @@ export const ConversationViewer = memo(function ConversationViewer({
         </div>
       );
     },
-    [turnGroups, session.agentRegistry]
+    [turnGroups, session.agentRegistry, onShareFromTurn, shareLoading]
   );
 
   const virtuosoStyle = useMemo(() => ({ height: '100%' as const }), []);
@@ -213,6 +243,7 @@ export const ConversationViewer = memo(function ConversationViewer({
         agentCount={regularAgentCount}
         isIndexOpen={isIndexOpen}
         onToggleIndex={toggleIndex}
+        isShared={isShared}
       />
 
       <div className="flex-1 overflow-hidden flex">
