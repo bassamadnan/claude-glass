@@ -58,11 +58,16 @@ function extractToolResultContent(block: ContentBlockToolResult): string {
 export function parseJsonl(text: string): LogEntry[] {
   const lines = text.trim().split('\n');
   const entries: LogEntry[] = [];
+  const seenUuids = new Set<string>();
 
   for (const line of lines) {
     if (!line.trim()) continue;
     try {
       const entry = JSON.parse(line) as LogEntry;
+      if (entry.uuid) {
+        if (seenUuids.has(entry.uuid)) continue;
+        seenUuids.add(entry.uuid);
+      }
       entries.push(entry);
     } catch (e) {
       console.warn('Failed to parse line:', line.substring(0, 100), e);
@@ -74,6 +79,8 @@ export function parseJsonl(text: string): LogEntry[] {
 
 export function groupIntoTurns(entries: LogEntry[]): ConversationTurn[] {
   const turns: ConversationTurn[] = [];
+  // Deduplicate real user messages with same timestamp+content (conversation branches/retries)
+  const seenUserMessages = new Set<string>();
 
   // Collect system compact_boundary entries paired with nearby summaries
   const systemEntries = entries.filter(isSystemEntry)
@@ -102,9 +109,10 @@ export function groupIntoTurns(entries: LogEntry[]): ConversationTurn[] {
     });
   }
 
-  // Filter to user/assistant message entries
+  // Filter to user/assistant message entries, excluding sidechain branches
   const messageEntries = entries.filter(
-    (e) => e.type === 'user' || e.type === 'assistant'
+    (e) => (e.type === 'user' || e.type === 'assistant') &&
+      !(e as UserLogEntry | AssistantLogEntry).isSidechain
   );
 
   // Sort by timestamp to ensure chronological order
@@ -176,6 +184,17 @@ export function groupIntoTurns(entries: LogEntry[]): ConversationTurn[] {
       if (entry.agentId) {
         i++;
         continue;
+      }
+
+      // Deduplicate branched user messages (same timestamp + content, different UUID)
+      // Claude Code can write the same message twice when a conversation branches/retries
+      if (userContent.trim()) {
+        const dedupKey = `${entry.timestamp}|${userContent.slice(0, 200)}`;
+        if (seenUserMessages.has(dedupKey)) {
+          i++;
+          continue;
+        }
+        seenUserMessages.add(dedupKey);
       }
 
       // Skip messages that look like internal CLI commands or outputs
