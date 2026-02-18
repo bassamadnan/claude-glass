@@ -53,7 +53,7 @@ function App() {
     }
   }, []);
 
-  const handleFileLoad = useCallback((files: { content: string; filename: string }[]) => {
+  const handleFileLoad = useCallback((files: { content: string; filename: string }[], displayName?: string) => {
     try {
       setError(null);
 
@@ -69,7 +69,7 @@ function App() {
       }
 
       setSession(parsed);
-      setFilename(files.length > 1 ? `${files.length} files: ${fileNames}` : fileNames);
+      setFilename(displayName || (files.length > 1 ? `${files.length} files: ${fileNames}` : fileNames));
     } catch (e) {
       console.error('Failed to parse session:', e);
       setError('Failed to parse the log file(s). Make sure they\'re valid Claude CLI session logs.');

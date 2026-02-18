@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { TurnViewer } from './TurnViewer';
 import { EditDiffView } from './TurnViewer';
-import { formatTimestamp, formatTokens } from '../lib/utils';
+import { formatTimestamp, formatTimeOnly, formatTokens } from '../lib/utils';
 import type { TurnGroup, AgentInfo } from '../types';
 
 interface TurnGroupViewerProps {
@@ -138,7 +138,11 @@ export const TurnGroupViewer = memo(function TurnGroupViewer({
             )}
             <span className="text-xs text-muted-foreground flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              {formatTimestamp(firstTurn.timestamp)} – {formatTimestamp(lastTurn.timestamp)}
+              {formatTimestamp(firstTurn.timestamp)} – {
+                new Date(firstTurn.timestamp).toDateString() === new Date(lastTurn.timestamp).toDateString()
+                  ? formatTimeOnly(lastTurn.timestamp)
+                  : formatTimestamp(lastTurn.timestamp)
+              }
             </span>
             {totalTokens > 0 && (
               <span className="text-xs text-muted-foreground">
