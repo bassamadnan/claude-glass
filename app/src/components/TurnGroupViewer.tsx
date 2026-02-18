@@ -112,8 +112,9 @@ export const TurnGroupViewer = memo(function TurnGroupViewer({
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="w-full text-left mb-3"
+          title={isExpanded ? 'Collapse responses' : 'Expand responses'}
         >
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 rounded-lg hover:bg-muted/40 transition-colors px-2 -mx-2 py-1">
             <span className="font-semibold text-assistant">Claude</span>
             <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-400 font-medium flex items-center gap-1">
               <Layers className="w-3 h-3" />

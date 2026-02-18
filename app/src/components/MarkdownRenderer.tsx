@@ -1,8 +1,21 @@
 import { memo } from 'react';
+import type { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './CodeBlock';
 import { cn } from '../lib/utils';
+
+const BOX_DRAWING_RE = /[┌┐└┘├┤┬┴┼─│╔╗╚╝╠╣╦╩╬═║▲▼◄►]/;
+
+function nodeToText(node: ReactNode): string {
+  if (typeof node === 'string') return node;
+  if (Array.isArray(node)) return node.map(nodeToText).join('');
+  if (node && typeof node === 'object' && 'props' in (node as object)) {
+    const el = node as { props: { children?: ReactNode } };
+    return el.props.children ? nodeToText(el.props.children) : '';
+  }
+  return '';
+}
 
 interface MarkdownRendererProps {
   content: string;
@@ -114,6 +127,13 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           );
         },
         p({ children }) {
+          if (BOX_DRAWING_RE.test(nodeToText(children))) {
+            return (
+              <pre className="font-mono text-sm whitespace-pre overflow-x-auto my-3 leading-relaxed">
+                {children}
+              </pre>
+            );
+          }
           return <p className="my-3 leading-relaxed">{children}</p>;
         },
         hr() {

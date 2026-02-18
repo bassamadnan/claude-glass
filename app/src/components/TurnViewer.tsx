@@ -677,8 +677,9 @@ export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegis
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="w-full text-left"
+            title={isExpanded ? 'Collapse message' : 'Expand message'}
           >
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2 rounded-lg hover:bg-muted/40 transition-colors px-2 -mx-2 py-1">
               <span className="font-semibold text-user">User</span>
               <span className="text-xs text-muted-foreground">
                 {formatTimestamp(turn.timestamp)}
@@ -742,7 +743,14 @@ export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegis
       <div className="space-y-1.5 py-2">
         <div className="flex items-center gap-3">
           <div className="flex-1 h-px bg-border" />
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">
+          <button
+            onClick={() => turn.summaryText && setIsExpanded(!isExpanded)}
+            className={cn(
+              'flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs transition-colors',
+              turn.summaryText && 'hover:bg-amber-500/20 cursor-pointer',
+            )}
+            title={turn.summaryText ? (isExpanded ? 'Hide summary' : 'Show compaction summary') : undefined}
+          >
             <Scissors className="w-3 h-3" />
             <span className="font-medium">
               Conversation compacted
@@ -757,7 +765,10 @@ export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegis
                 at {formatTokens(turn.preTokens)} tokens
               </span>
             )}
-          </div>
+            {turn.summaryText && (
+              isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+            )}
+          </button>
           <div className="flex-1 h-px bg-border" />
         </div>
         {sectionAgents.length > 0 && (
@@ -777,6 +788,11 @@ export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegis
                 #{agent.agentNumber}{agent.description ? ` ${agent.description}` : ''}
               </span>
             ))}
+          </div>
+        )}
+        {turn.summaryText && isExpanded && (
+          <div className="mx-4 p-3 rounded-lg bg-amber-500/5 border border-amber-500/15 text-xs text-muted-foreground leading-relaxed">
+            {turn.summaryText}
           </div>
         )}
       </div>
@@ -845,8 +861,9 @@ export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegis
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="w-full text-left mb-3"
+            title={isExpanded ? 'Collapse response' : 'Expand response'}
           >
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg hover:bg-muted/40 transition-colors px-2 -mx-2 py-1">
               <span className="font-semibold text-assistant">Claude</span>
               <span className="text-xs text-muted-foreground">
                 {formatTimestamp(turn.timestamp)}
@@ -922,6 +939,7 @@ export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegis
                       setShowThinkingModal(true);
                     }}
                     className="text-xs px-3 py-1.5 rounded-lg bg-thinking/10 text-thinking hover:bg-thinking/20 transition-colors flex items-center gap-2"
+                    title="View thinking process"
                   >
                     <Brain className="w-3 h-3" />
                     Thinking ({turn.thinking!.length} blocks · {formatCharCount(thinkingCharCount)} chars)
@@ -934,6 +952,7 @@ export const TurnViewer = memo(function TurnViewer({ turn, agentInfo, agentRegis
                       setShowToolsModal(true);
                     }}
                     className="text-xs px-3 py-1.5 rounded-lg bg-tool/10 text-tool hover:bg-tool/20 transition-colors flex items-center gap-2"
+                    title="View tool calls"
                   >
                     <Wrench className="w-3 h-3" />
                     {turn.toolExecutions!.length} tool call{turn.toolExecutions!.length > 1 ? 's' : ''}
