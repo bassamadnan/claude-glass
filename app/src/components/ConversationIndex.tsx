@@ -1,5 +1,5 @@
 import { memo, useRef, useEffect } from 'react';
-import { User, Scissors } from 'lucide-react';
+import { Scissors } from 'lucide-react';
 import { cn, formatTokens } from '../lib/utils';
 import type { TurnGroup } from '../types';
 
@@ -13,11 +13,13 @@ interface IndexEntry {
   groupIndex: number;
   type: 'user' | 'compact';
   label: string;
+  num?: number;
   preTokens?: number;
 }
 
 function buildIndex(groups: TurnGroup[]): IndexEntry[] {
   const entries: IndexEntry[] = [];
+  let userCount = 0;
   for (let i = 0; i < groups.length; i++) {
     const group = groups[i];
     const firstTurn = group.turns[0];
@@ -26,9 +28,11 @@ function buildIndex(groups: TurnGroup[]): IndexEntry[] {
     if (group.turns.length > 1) continue;
 
     if (firstTurn.type === 'user' && firstTurn.userContent && !firstTurn.agentId) {
+      userCount++;
       entries.push({
         groupIndex: i,
         type: 'user',
+        num: userCount,
         label: firstTurn.userContent.length > 60
           ? firstTurn.userContent.slice(0, 60) + '\u2026'
           : firstTurn.userContent,
@@ -132,7 +136,7 @@ export const ConversationIndex = memo(function ConversationIndex({
                 : 'border-l-transparent hover:bg-muted/50 text-muted-foreground',
             )}
           >
-            <User className="w-3 h-3 mt-0.5 shrink-0" />
+            <span className="text-[10px] text-muted-foreground/50 w-5 shrink-0 text-right leading-none mt-0.5">{entry.num}</span>
             <span className="text-xs leading-snug line-clamp-2">{entry.label}</span>
           </button>
         );
