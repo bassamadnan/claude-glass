@@ -117,16 +117,6 @@ const SessionHeader = memo(function SessionHeader({
             </div>
           </div>
 
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-            title="View on GitHub"
-          >
-            <Github className="w-5 h-5" />
-          </a>
-
           <button
             onClick={onToggleIndex}
             className="p-2 rounded-lg hover:bg-muted transition-colors"
@@ -138,6 +128,16 @@ const SessionHeader = memo(function SessionHeader({
               <PanelLeftOpen className="w-5 h-5" />
             )}
           </button>
+
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            title="View on GitHub"
+          >
+            <Github className="w-5 h-5" />
+          </a>
         </div>
       </div>
     </div>

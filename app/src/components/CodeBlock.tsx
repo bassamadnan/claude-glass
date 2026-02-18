@@ -1,7 +1,7 @@
 import { useEffect, useState, memo } from 'react';
-import { codeToHtml } from 'shiki';
 import { Copy, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { getHighlighter, SUPPORTED_LANGUAGES } from '../lib/highlighter';
 
 interface CodeBlockProps {
   code: string;
@@ -26,42 +26,21 @@ export const CodeBlock = memo(function CodeBlock({
 
     const highlight = async () => {
       try {
-        // Map common language aliases
         const langMap: Record<string, string> = {
-          bash: 'bash',
-          sh: 'bash',
-          shell: 'bash',
-          zsh: 'bash',
-          js: 'javascript',
-          ts: 'typescript',
-          tsx: 'tsx',
-          jsx: 'jsx',
-          py: 'python',
-          rb: 'ruby',
-          yml: 'yaml',
-          md: 'markdown',
-          json: 'json',
-          cpp: 'cpp',
-          c: 'c',
-          sql: 'sql',
-          rs: 'rust',
-          go: 'go',
+          sh: 'bash', shell: 'bash', zsh: 'bash',
+          js: 'javascript', ts: 'typescript',
+          py: 'python', rb: 'ruby', yml: 'yaml',
+          md: 'markdown', rs: 'rust',
         };
 
-        const lang = langMap[language.toLowerCase()] || language.toLowerCase() || 'text';
+        const resolved = langMap[language.toLowerCase()] || language.toLowerCase() || 'text';
+        const lang = SUPPORTED_LANGUAGES.includes(resolved) ? resolved : 'text';
 
-        const highlighted = await codeToHtml(code, {
-          lang: lang,
-          theme: 'github-dark-default',
-        });
-        if (mounted) {
-          setHtml(highlighted);
-        }
+        const hl = await getHighlighter();
+        const highlighted = hl.codeToHtml(code, { lang, theme: 'github-dark-default' });
+        if (mounted) setHtml(highlighted);
       } catch (e) {
-        // Fallback if language not supported
-        if (mounted) {
-          setHtml(`<pre><code>${escapeHtml(code)}</code></pre>`);
-        }
+        if (mounted) setHtml(`<pre><code>${escapeHtml(code)}</code></pre>`);
       }
     };
 
