@@ -109,10 +109,9 @@ export function groupIntoTurns(entries: LogEntry[]): ConversationTurn[] {
     });
   }
 
-  // Filter to user/assistant message entries, excluding sidechain branches
+  // Filter to user/assistant message entries
   const messageEntries = entries.filter(
-    (e) => (e.type === 'user' || e.type === 'assistant') &&
-      !(e as UserLogEntry | AssistantLogEntry).isSidechain
+    (e) => e.type === 'user' || e.type === 'assistant'
   );
 
   // Sort by timestamp to ensure chronological order
